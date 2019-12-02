@@ -1,0 +1,105 @@
+############################################## Easily create VM and Attack it fro Google Platform ##############################################
+After i run the first time steps at the bottom, i can easily make honeypot VM using google platform:
+
+1) Google Cloud Platform:
+    VM Name: honeypot-123...	
+    us-central1-f	
+    ubuntu 18.04 Minimal
+2) go to admin page and copy the deploy command
+3) use google to open the V via ssh and run the deploy command
+4) go back to honeypot VM and run this to attack it
+    nmap -A -T4 <external ip addr of honeypot VM>
+
+
+
+
+############################################## FIRST TIME STEPS #####################################################################################
+a) download sdk: https://cloud.google.com/sdk/docs/quickstarts
+b) set up the Ubuntu 18.04 Minimal compute engine in Google Cloud Platform
+c) these steps:
+
+1)----------------------------- (create) ------------------------- MILESTONE 1: Create MHN Admin VM (GCP Users Firewall Setup) -------------------
+	Follow setps in the terminal to make a new project, select the project, then do: 
+		gcloud init
+	set the zone and region:
+		set CLOUDSDK_COMPUTE_REGION=us-central1
+		set CLOUDSDK_COMPUTE_ZONE=us-central1-fzone
+		gcloud config list
+	go to google cloud platform on the web -> compute engine - > new instance 
+		-> put inthe region and zone
+		-> choose the Ubuntu 18.04 Minimal boot disk	
+		-> Allow HTTP traffic allowed
+
+	creating the firewall. Lat three opens the inbound ports for MHN Admin:
+		gcloud compute firewall-rules list
+		gcloud compute firewall-rules create http --allow tcp:80 --description="Allow HTTP from Anywhere" --direction ingress --target-tags="mhn-admin"
+		gcloud compute firewall-rules create honeymap --allow tcp:3000 --description="Allow HoneyMap Feature from Anywhere" --direction ingress --target-tags="mhn-admin"
+		gcloud compute firewall-rules create hpfeeds --allow tcp:10000 --description="Allow HPFeeds from Anywhere" --direction ingress --target-tags="mhn-admin"
+
+	creating the VM itself, will call using mhn-admin:
+		gcloud compute instances create "mhn-admin" --machine-type "n1-standard-1" --subnet "default" --maintenance-policy "MIGRATE"  --tags "mhn-admin"  --image "ubuntu-minimal-1804-bionic-v20191024"  --image-project "ubuntu-os-cloud"  --boot-disk-size "10"  --boot-disk-type "pd-standard"  --boot-disk-device-name "mhn-admin"
+
+	establish SSH access to the VM:
+		gcloud compute ssh mhn-admin
+
+	*****RECORD THE IP ADDRESS WILL USE THIS TO SIGNIN TO SEE THE HONEYPOTS*****
+	*****connect to VM via putty via ssh: gcloud compute ssh <VM name>*****
+
+2)-------------------------- (install in PUTTY) ------------------ MILESTONE 2: Install the MHN Admin Application -------------------
+	On the putty terinal run these steps (30-40 min):
+		sudo apt update
+		sudo apt upgrade -y
+		sudo apt install git python-magic -y
+	Download MHN and install it:
+		cd /opt/
+		sudo git clone https://github.com/pwnlandia/mhn.git
+		cd mhn/
+		sudo ./install.sh
+			You will get these options: 
+				debug mode? y/n? <type n>
+				superuser email: email to use to login to admin console. 
+				superuser password
+				rest of the values will be dafault - hit enter for them
+			Then these options:
+				Server base url ["http://#.#.#.#"]: 		<hit enter>
+				Honeymap url ["http://#.#.#.#:3000"]: 		<hit enter>
+				Mail server address ["localhost"]: 			<hit enter>
+				Mail server port [25]: 						<hit enter>
+				Use TLS for email?: y/n n					<type n>
+				Use SSL for email?: y/n n					<type n>
+				Mail server username [""]:					<hit enter>
+				Mail server password [""]:					<hit enter>
+				Mail default sender [""]:					<hit enter>
+				Path for log file ["/var/log/mhn/mhn.log"]:	<hit enter>
+					
+				Would you like to integrate with Splunk? (y/n) n
+				Would you like to install ELK? (y/n) n
+				Would you like to add MHN rules to UFW? (y/n) n
+
+3)----------------------------- (create) ------------------------- MILESTONE 3: Create a MHN Honeypot VM --------------------------
+	List of Honeypots (will deploy Dionaea ovr HTTP): https://github.com/pwnlandia/mhn/wiki/List-of-Supported-Sensors 		
+	Onn local host (open cmd in windows 10):
+
+	Make new firewall rule to allow incomming TCP and UDP traffic on all ports for Honeypot:
+		gcloud compute firewall-rules create wideopen --description="Allow TCP and UDP from Anywhere"   --direction ingress  --priority=1000  --network=default  --action=allow  --rules=tcp,udp  --source-ranges=0.0.0.0/0  --target-tags="honeypot"
+	Now will create the VM for out honeypot called honeypot-1:
+		gcloud compute instances create "honeypot-1"  --machine-type "n1-standard-1"  --subnet "default"   --maintenance-policy "MIGRATE"  --tags "honeypot"  --image "ubuntu-minimal-1804-bionic-v20191024" --image-project "ubuntu-os-cloud"  --boot-disk-size "10"   --boot-disk-type "pd-standard"   --boot-disk-device-name "honeypot-1"	
+	Establish SSH access to the VM using:
+		gcloud compute ssh honeypot-1
+
+4)-------------------------- (install in PUTTY) ------------------ MILESTONE 4: Install the Honeypot Application -------------------
+	In the new honeypot VM, need to 
+		(1) install the honeypot application into the VM and 
+		(2) wire it to connect back to the admin server
+
+	-> Access the MHN admin console page: go to the external IP address that was given you you when u made the mhn-admin VM and login using the info you set up
+	-> click Deploy on the nav bar -> choose the Ubuntu/Raspberry Pi - Dionaea script 
+	-> Install the honeypot in the VM: 
+		copy the deploy command and execute it in the honeypotVM we just connected to in the last step
+	-> Go back to the MHN admin console in the browser and choose sensors -> view sensors to see the honeypots
+
+5)-------------------------------------------------------------- MILESTONE 5: Attack -----------------------------------------------
+	On Kali linux will use nmap to attack: pass in the ip address of the honeypot VM not the MHN VM:
+		can take about 3 minutes:
+		nmap -A -T4 <external ip addr of honeypot VM>
+
